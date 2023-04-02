@@ -12,6 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver import ActionChains
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, NoSuchWindowException, InvalidSessionIdException
+from selenium.webdriver.remote.remote_connection import LOGGER
 import getpass
 from cryptography.fernet import Fernet
 import os, sys, csv, time
@@ -19,25 +20,26 @@ from pathlib import Path
 import dotenv
 from io import StringIO
 from pandas import read_csv
+import warnings
+import logging
+
+warnings.filterwarnings("ignore")
+selenium_logger = logging.getLogger('selenium.webdriver.remote.remote_connection')
+selenium_logger.setLevel(logging.WARNING)
 
 # use CONTROL or COMMAND selected by OS
 if sys.platform == 'darwin':
     CTRL = Keys.COMMAND
 else: CTRL = Keys.CONTROL
 
-desktop = os.path.expanduser("~/Desktop")
-setup_path = desktop
+setup_path = os.path.join(os.getcwd(), "Course-Files")
 verbose = '-v' in sys.argv
 if '-p' in sys.argv:
     setup_path = sys.argv[sys.argv.index('-p')+1]
 
-
-# In[2]:
-
-
 def open_driver():
     if not os.path.exists(setup_path):
-        raise TypeError('SETUP PATH IS NOT VALID OR INACCESSIBLE')
+        os.mkdir(setup_path)
     
     root = os.path.join(setup_path, 'Dersler')
     download_dir = os.path.join(root, '.Downloads')
@@ -50,12 +52,12 @@ def open_driver():
     os.chdir(root)
     
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.add_argument('log-level=3')
     prefs = {"download.default_directory" : download_dir}
+    chrome_options.add_argument("--log-level=3")
     chrome_options.add_experimental_option('prefs', prefs)
     if not verbose:
-        chrome_options.add_argument('--headless') # by choice
-    
+        chrome_options.add_argument('--headless') # by choice
+        
     # Driver
     chrome_driver_path = 'chromedriver'
     driver = webdriver.Chrome(chrome_driver_path, chrome_options=chrome_options)
@@ -152,6 +154,7 @@ def get_local_path(driver, root):
         online_path = os.path.join(*list(map(str.strip, path_list)), online_folder_path[1:-1])
     else:
         online_path = os.path.join(*list(map(str.strip, path_list)))
+    online_path = online_path.replace(":", "")  # Prevent prohibited characters in file names
     
     path = os.path.join(root, online_path)
 
@@ -163,7 +166,7 @@ def download_and_move(driver, root, download_dir):
     counter = 0
     try:
         while len(driver.window_handles) > 0:
-            archive = open('.archive.csv', 'a+', newline='')
+            archive = open('.archive.csv', 'a+', newline='', encoding='utf-8')
             fieldnames = ['path', 'date']
             writer = csv.DictWriter(archive, fieldnames=fieldnames)
             archive.seek(0)
@@ -174,7 +177,7 @@ def download_and_move(driver, root, download_dir):
                 archive = open('.archive.csv', 'a+', newline='')
                 writer = csv.DictWriter(archive, fieldnames=fieldnames) 
 
-            archive_paths = list(map(str, read_csv('.archive.csv')['path']))
+            archive_paths = list(map(str, read_csv('.archive.csv', encoding="utf-8")['path']))
             tbody_xpath = '//*[@id="aspnetForm"]/div[3]/div[3]/div[3]/div/div[2]/table[2]/tbody'
             for page in driver.window_handles:
                 driver.switch_to.window(page)
@@ -220,8 +223,9 @@ def download_and_move(driver, root, download_dir):
 
                                     time.sleep(0.3) # Time can be estimated in future work (file size / internet speed)
 
-                                downloaded_path = os.path.join(download_dir, downloading_file)
-                                os.system(f'mv "{downloaded_path}" "{course_local_path}"')
+                                downloaded_path = os.path.join(download_dir, downloading_file)                                    
+                                moved_path = os.path.join(course_local_path, downloading_file)
+                                os.rename(downloaded_path, moved_path)
                                 writer.writerow({'path':online_abs_path, 'date':date.replace(',', ' ')})
                             else:
                                 raise IndexError('There are many or no files downloading.')
@@ -240,15 +244,10 @@ def download_and_move(driver, root, download_dir):
         archive.close()
         if counter > 1: print(f'{counter} files are downloaded.')
         else: print(f'{counter} file is downloaded.')
-
-
-# In[3]:
-
-
+        
 driver, root, download_dir = open_driver()
 login_check(setup_path, driver)
 open_course_websites(driver)
 open_class_course_files(driver)
 download_and_move(driver, root, download_dir)
 driver.quit()
-
