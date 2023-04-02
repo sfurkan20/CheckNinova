@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[10]:
+
+
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
@@ -20,7 +26,14 @@ if sys.platform == 'darwin':
 else: CTRL = Keys.CONTROL
 
 desktop = os.path.expanduser("~/Desktop")
-setup_path = os.path.join(desktop, 'Deneme')
+setup_path = desktop
+verbose = '-v' in sys.argv
+if '-p' in sys.argv:
+    setup_path = sys.argv[sys.argv.index('-p')+1]
+
+
+# In[2]:
+
 
 def open_driver():
     if not os.path.exists(setup_path):
@@ -37,9 +50,11 @@ def open_driver():
     os.chdir(root)
     
     chrome_options = webdriver.ChromeOptions()
+    chrome_options.add_argument('log-level=3')
     prefs = {"download.default_directory" : download_dir}
     chrome_options.add_experimental_option('prefs', prefs)
-    # options.add_argument('--headless') # by choice
+    if not verbose:
+        chrome_options.add_argument('--headless') # by choice
     
     # Driver
     chrome_driver_path = 'chromedriver'
@@ -225,10 +240,15 @@ def download_and_move(driver, root, download_dir):
         archive.close()
         if counter > 1: print(f'{counter} files are downloaded.')
         else: print(f'{counter} file is downloaded.')
-        
+
+
+# In[3]:
+
+
 driver, root, download_dir = open_driver()
 login_check(setup_path, driver)
 open_course_websites(driver)
 open_class_course_files(driver)
 download_and_move(driver, root, download_dir)
 driver.quit()
+
